@@ -1,5 +1,9 @@
 package es.unizar.tmdad.lab2.configuration;
 
+import es.unizar.tmdad.lab2.domain.MyTweet;
+import es.unizar.tmdad.lab2.domain.TargetedTweet;
+import es.unizar.tmdad.lab2.service.TwitterLookupService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -10,12 +14,20 @@ import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.social.twitter.api.StreamListener;
+import org.springframework.social.twitter.api.Tweet;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableIntegration
 @IntegrationComponentScan
 @ComponentScan
 public class TwitterFlow {
+
+	@Autowired
+	private TwitterLookupService twitterLookupService;
 
 	@Bean
 	public DirectChannel requestChannel() {
@@ -37,8 +49,35 @@ public class TwitterFlow {
         // Split --> dividir un TargetedTweet con muchos tópicos en tantos TargetedTweet como tópicos haya
         // Transform --> señalar el contenido de un TargetedTweet
         //
-		return IntegrationFlows.from(requestChannel()).
-				handle("streamSendingService", "sendTweet").get();
+		return IntegrationFlows.from(requestChannel())
+				.filter(p -> p instanceof Tweet)
+				.<Tweet, TargetedTweet>transform(
+						p -> {
+								MyTweet tweet = new MyTweet(p);
+								List<String> topics = twitterLookupService.getQueries().stream()
+										.filter(key -> p.getText().contains(key))
+										.collect(Collectors.toList());
+										return new TargetedTweet(tweet, topics);
+
+								})
+
+				.split(TargetedTweet.class, p -> {
+												List<TargetedTweet> targetedTweets = new ArrayList<TargetedTweet>(p.getTargets().size());
+
+												for (String s : p.getTargets()) {
+													targetedTweets.add(new TargetedTweet(p.getTweet(), s));
+												}
+												return targetedTweets;
+											})
+
+				.<TargetedTweet,TargetedTweet>transform(p -> {
+					p.getTweet().setUnmodifiedText(p.getTweet().getUnmodifiedText()
+							.replaceAll(p.getFirstTarget(), "<b>"+ p.getFirstTarget() +"</b>"));
+					return p;
+				})
+
+				.handle("streamSendingService", "sendTweet").get();
+
 	}
 
 }
