@@ -74,7 +74,7 @@ public class StreamSendingService {
 		Map<String, Object> map = new HashMap<>();
 		map.put(MessageHeaders.CONTENT_TYPE, MimeTypeUtils.APPLICATION_JSON);
 
-		ops.convertAndSend("/queue/search" + tweet.getFirstTarget(), tweet.getTweet(), map);
+		ops.convertAndSend("/queue/search/" + tweet.getFirstTarget(), tweet.getTweet(), map);
 	}
 
 
